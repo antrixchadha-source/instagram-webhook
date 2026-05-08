@@ -22,7 +22,7 @@ const linkLines = [
   (link) => `Here's what you're looking for 👉 ${link}`,
   (link) => `Grab it here: ${link}`,
   (link) => `Check this out → ${link}`,
-  (link) => `This is the link I think you'll want:\n${link}`,
+  (link) => `This is the link :\n${link}`,
 ];
 
 const closers = [
@@ -104,8 +104,8 @@ export default async function handler(req, res) {
 
 function pickPublicReply(username) {
   const opts = [
-    `Just sent you a DM ${username ? "@" + username : ""} 📩`,
-    `It's @glide.xyz ALso Check your DMs! 💌`,
+    `Just sent you a DM, it's @glide.xyz  ${username ? "@" + username : ""} 📩`,
+    `It's @glide.xyz ,ALso Check your DMs! 💌`,
     `DM sent your way 🚀, It's @glide.xyz `,
     `Replied in your inbox, check @glide.xyz ✨`,
   ];
