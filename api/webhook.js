@@ -105,9 +105,9 @@ export default async function handler(req, res) {
 function pickPublicReply(username) {
   const opts = [
     `Just sent you a DM ${username ? "@" + username : ""} 📩`,
-    `Check your DMs! 💌`,
-    `DM sent your way 🚀`,
-    `Replied in your inbox ✨`,
+    `It's @glide.xyz ALso Check your DMs! 💌`,
+    `DM sent your way 🚀, It's @glide.xyz `,
+    `Replied in your inbox, check @glide.xyz ✨`,
   ];
   return pick(opts).trim();
 }
