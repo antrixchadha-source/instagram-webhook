@@ -131,31 +131,70 @@ function pickPublicReply(username, private_reply_sent) {
   return pick(fallbackOpts).trim();
 }
 
+// Headers worth surfacing when Graph rejects a call — they include the
+// internal debug trace and rate-limit usage that Meta wants in support reports.
+const DEBUG_HEADERS = [
+  "x-fb-debug",
+  "x-fb-trace-id",
+  "x-fb-rev",
+  "facebook-api-version",
+  "x-app-usage",
+  "x-business-use-case-usage",
+  "x-ad-account-usage",
+  "www-authenticate",
+];
+
+function logGraphError(label, err, context = {}) {
+  const res = err.response;
+  const headers = res?.headers || {};
+  const debugHeaders = Object.fromEntries(
+    DEBUG_HEADERS.filter((h) => headers[h] != null).map((h) => [h, headers[h]])
+  );
+  console.error(`${label} status=${res?.status} statusText=${res?.statusText}`);
+  console.error(`${label} context:`, JSON.stringify(context));
+  console.error(`${label} body:`, JSON.stringify(res?.data || err.message));
+  if (Object.keys(debugHeaders).length) {
+    console.error(`${label} debug headers:`, JSON.stringify(debugHeaders));
+  }
+  if (res?.data?.__debug__) {
+    console.error(`${label} __debug__:`, JSON.stringify(res.data.__debug__));
+  }
+}
+
 async function sendPrivateReply(commentId, text) {
   const url = `${GRAPH}/${IG_USER_ID}/messages`;
-  console.log("🚀 Sending DM via:", url);
+  const params = { access_token: IG_ACCESS_TOKEN, debug: "all" };
+  const body = { recipient: { comment_id: commentId }, message: { text } };
+  console.log("🚀 Sending DM via:", url, "commentId:", commentId);
   try {
-    const { data } = await axios.post(
-      url,
-      { recipient: { comment_id: commentId }, message: { text } },
-      { params: { access_token: IG_ACCESS_TOKEN } }
-    );
+    const { data, headers } = await axios.post(url, body, { params });
     console.log("📨 DM sent successfully:", JSON.stringify(data));
+    if (headers["x-fb-debug"]) {
+      console.log("🔎 DM x-fb-debug:", headers["x-fb-debug"]);
+    }
+    if (data?.__debug__) {
+      console.log("🔎 DM __debug__:", JSON.stringify(data.__debug__));
+    }
   } catch (err) {
-    console.error("💥 DM send FAILED:", err.response?.status, JSON.stringify(err.response?.data));
+    logGraphError("💥 DM send FAILED", err, { url, commentId, textLength: text.length });
     throw err;
   }
 }
 
 async function replyPublicly(commentId, message) {
   const url = `${GRAPH}/${commentId}/replies`;
+  const params = { message, access_token: IG_ACCESS_TOKEN, debug: "all" };
   try {
-    await axios.post(url, null, {
-      params: { message, access_token: IG_ACCESS_TOKEN },
-    });
-    console.log("💬 Public reply posted");
+    const { data, headers } = await axios.post(url, null, { params });
+    console.log("💬 Public reply posted:", JSON.stringify(data));
+    if (headers["x-fb-debug"]) {
+      console.log("🔎 reply x-fb-debug:", headers["x-fb-debug"]);
+    }
+    if (data?.__debug__) {
+      console.log("🔎 reply __debug__:", JSON.stringify(data.__debug__));
+    }
   } catch (err) {
-    console.error("⚠️ Public reply failed:", err.response?.status, JSON.stringify(err.response?.data));
+    logGraphError("⚠️ Public reply failed", err, { url, commentId, messageLength: message.length });
     // Don't throw — public reply is optional
   }
 }
