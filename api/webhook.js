@@ -1,5 +1,6 @@
 // File: /api/webhook.js
 import axios from "axios";
+import { waitUntil } from "@vercel/functions";
 
 const {
   VERIFY_TOKEN,
@@ -8,7 +9,7 @@ const {
   APP_LINK,
 } = process.env;
 
-const GRAPH = "https://graph.instagram.com/v23.0";
+const GRAPH = "https://graph.instagram.com/v25.0";
 
 const greetings = [
   (name) => `Hey ${name}! 👋`,
@@ -61,55 +62,73 @@ export default async function handler(req, res) {
   if (req.method === "POST") {
     console.log("📥 RAW PAYLOAD:", JSON.stringify(req.body, null, 2));
 
-    try {
-      const entries = req.body?.entry || [];
-      for (const entry of entries) {
-        for (const change of entry.changes || []) {
-          if (change.field !== "comments") continue;
+    const entries = req.body?.entry || [];
+    for (const entry of entries) {
+      for (const change of entry.changes || []) {
+        if (change.field !== "comments") continue;
 
-          const c = change.value;
-          const commentId = c.id;
-          const fromId = c.from?.id;
-          const username = c.from?.username;
-          const text = c.text || "";
+        const c = change.value;
+        const commentId = c.id;
+        const fromId = c.from?.id;
+        const username = c.from?.username;
+        const text = c.text || "";
 
-          if (!commentId) {
-            console.error("❌ No commentId in payload");
-            continue;
-          }
-
-          // Skip our own comments to avoid loops
-          if (fromId === IG_USER_ID) {
-            console.log("⏭️ Own comment, skipping");
-            continue;
-          }
-
-          console.log(`💬 ${username || fromId}: "${text}"`);
-
-          const message = buildPersonalDM({ username });
-          await sendPrivateReply(commentId, message);
-          await replyPublicly(commentId, pickPublicReply(username));
+        if (!commentId) {
+          console.error("❌ No commentId in payload");
+          continue;
         }
+
+        // Skip our own comments to avoid loops
+        if (fromId === IG_USER_ID) {
+          console.log("⏭️ Own comment, skipping");
+          continue;
+        }
+
+        console.log(`💬 ${username || fromId}: "${text}"`);
+
+        // Ack Instagram immediately; finish the work in the background so
+        // Meta doesn't retry while we're still hitting the Graph API.
+        waitUntil(processComment({ commentId, username }));
       }
-    } catch (err) {
-      console.error("❌ Handler error:", err.response?.status, JSON.stringify(err.response?.data || err.message));
     }
 
-    // Respond AFTER all work is done (key fix!)
     return res.status(200).send("OK");
   }
 
   return res.status(405).send("Method Not Allowed");
 }
 
-function pickPublicReply(username) {
+async function processComment({ commentId, username }) {
+  const message = buildPersonalDM({ username });
+  let privateReplySent = false;
+  try {
+    await sendPrivateReply(commentId, message);
+    privateReplySent = true;
+  } catch (err) {
+    console.error("⚠️ DM failed, will attempt public reply if possible");
+  }
+  try {
+    await replyPublicly(commentId, pickPublicReply(username, privateReplySent));
+  } catch (err) {
+    console.error("❌ Public reply failed:", err.response?.status, JSON.stringify(err.response?.data || err.message));
+  }
+}
+
+function pickPublicReply(username, private_reply_sent) {
   const opts = [
     `Just sent you a DM, it's @glide.xyz  ${username ? "@" + username : ""} 📩`,
     `It's @glide.xyz ,Check your DMs! 💌`,
     `DM sent your way 🚀, It's @glide.xyz `,
     `Replied in your inbox, check @glide.xyz ✨`,
   ];
-  return pick(opts).trim();
+  const fallbackOpts = [
+    `It's @glide.xyz  ${username ? "@" + username : ""} 📩`,
+    `Check out @glide.xyz ✨`,
+  ];
+  if (private_reply_sent) {
+    return pick(opts).trim();
+  }
+  return pick(fallbackOpts).trim();
 }
 
 async function sendPrivateReply(commentId, text) {
