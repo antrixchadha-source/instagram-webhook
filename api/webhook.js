@@ -72,7 +72,7 @@ export default async function handler(req, res) {
         const commentId = c.id;
         const fromId = c.from?.id;
         const username = c.from?.username;
-        const parentId = c.parentId;
+        const parentId = c.parent_id;
         const text = c.text || "";
 
         if (!commentId) {
