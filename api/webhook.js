@@ -64,6 +64,7 @@ export default async function handler(req, res) {
 
     const entries = req.body?.entry || [];
     for (const entry of entries) {
+      const ownerId = entry?.id;
       for (const change of entry.changes || []) {
         if (change.field !== "comments") continue;
 
@@ -71,6 +72,7 @@ export default async function handler(req, res) {
         const commentId = c.id;
         const fromId = c.from?.id;
         const username = c.from?.username;
+        const parentId = c.parentId;
         const text = c.text || "";
 
         if (!commentId) {
@@ -78,8 +80,13 @@ export default async function handler(req, res) {
           continue;
         }
 
+        if (parentId) {
+          console.log("⏭️ Reply comment, skipping");
+          continue;
+        }
+
         // Skip our own comments to avoid loops
-        if (fromId === IG_USER_ID) {
+        if (fromId === IG_USER_ID || fromId === ownerId) {
           console.log("⏭️ Own comment, skipping");
           continue;
         }
