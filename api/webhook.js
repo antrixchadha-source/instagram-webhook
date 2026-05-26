@@ -61,10 +61,12 @@ export default async function handler(req, res) {
 
   // ---- POST: Comment events ----
   if (req.method === "POST") {
-    // Kill-switch: set WEBHOOK_PAUSED=true in Vercel env to silently ack
-    // incoming events without sending DMs or replies. Unset to resume.
-    if (WEBHOOK_PAUSED === "true") {
-      console.log("⏸️ WEBHOOK_PAUSED=true — acking without processing");
+    // Kill-switch: set WEBHOOK_PAUSED to any non-empty value in Vercel env
+    // to silently ack incoming events without sending DMs or replies.
+    const pausedRaw = (WEBHOOK_PAUSED ?? "").trim();
+    console.log(`🔧 WEBHOOK_PAUSED=${JSON.stringify(WEBHOOK_PAUSED)} (trimmed=${JSON.stringify(pausedRaw)})`);
+    if (pausedRaw && pausedRaw.toLowerCase() !== "false" && pausedRaw !== "0") {
+      console.log("⏸️ paused — acking without processing");
       return res.status(200).send("OK");
     }
 
