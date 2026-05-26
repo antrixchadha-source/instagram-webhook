@@ -7,6 +7,7 @@ const {
   IG_ACCESS_TOKEN,
   IG_USER_ID,
   APP_LINK,
+  WEBHOOK_PAUSED,
 } = process.env;
 
 const GRAPH = "https://graph.instagram.com/v25.0";
@@ -60,6 +61,13 @@ export default async function handler(req, res) {
 
   // ---- POST: Comment events ----
   if (req.method === "POST") {
+    // Kill-switch: set WEBHOOK_PAUSED=true in Vercel env to silently ack
+    // incoming events without sending DMs or replies. Unset to resume.
+    if (WEBHOOK_PAUSED === "true") {
+      console.log("⏸️ WEBHOOK_PAUSED=true — acking without processing");
+      return res.status(200).send("OK");
+    }
+
     console.log("📥 RAW PAYLOAD:", JSON.stringify(req.body, null, 2));
 
     const entries = req.body?.entry || [];
