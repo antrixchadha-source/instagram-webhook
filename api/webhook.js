@@ -8,7 +8,17 @@ const {
   IG_USER_ID,
   APP_LINK,
   WEBHOOK_PAUSED,
+  IG_PAUSED,
+  HERSHEY_USER_ID,
+  HERSHEY_TOKEN,
+  HERSHEY_APP_LINK,
+  HERSHEY_PAUSED,
 } = process.env;
+
+const truthy = (v) => {
+  const s = (v ?? "").trim().toLowerCase();
+  return !!s && s !== "false" && s !== "0";
+};
 
 const GRAPH = "https://graph.instagram.com/v25.0";
 
@@ -103,9 +113,23 @@ export default async function handler(req, res) {
 
         console.log(`💬 ${username || fromId}: "${text}"`);
 
-        // Ack Instagram immediately; finish the work in the background so
-        // Meta doesn't retry while we're still hitting the Graph API.
-        waitUntil(processComment({ commentId, username }));
+        // Route to the right account handler. Per-account pause flags
+        // override only that account; WEBHOOK_PAUSED above is global.
+        if (ownerId === IG_USER_ID) {
+          if (truthy(IG_PAUSED)) {
+            console.log("⏸️ IG_PAUSED — skipping riddhi comment");
+            continue;
+          }
+          waitUntil(processComment({ commentId, username }));
+        } else if (ownerId === HERSHEY_USER_ID) {
+          if (truthy(HERSHEY_PAUSED)) {
+            console.log("⏸️ HERSHEY_PAUSED — skipping hershey comment");
+            continue;
+          }
+          waitUntil(processHersheyComment({ commentId, username }));
+        } else {
+          console.log(`⏭️ no handler for owner ${ownerId}`);
+        }
       }
     }
 
@@ -174,5 +198,86 @@ async function replyPublicly(commentId, message) {
   } catch (err) {
     console.error("⚠️ Public reply failed:", err.response?.status, JSON.stringify(err.response?.data));
     // Don't throw — public reply is optional
+  }
+}
+
+// ============================================================
+// hersheytravels2 handlers
+// ============================================================
+
+function buildHersheyDM({ username }) {
+  const name = username ? `@${username}` : "there";
+  return [pick(greetings)(name), pick(linkLines)(HERSHEY_APP_LINK), pick(closers)]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function pickHersheyPublicReply(privateReplySent) {
+  const dmSentOpts = [
+    `Just sent you a DM 📩`,
+    `Check your DMs! 💌`,
+    `DM sent your way 🚀`,
+    `Replied in your inbox ✨`,
+  ];
+  const fallbackOpts = [
+    `Check your DMs in a sec ✨`,
+    `DM coming your way 🚀`,
+  ];
+  return pick(privateReplySent ? dmSentOpts : fallbackOpts).trim();
+}
+
+async function processHersheyComment({ commentId, username }) {
+  const message = buildHersheyDM({ username });
+  let privateReplySent = false;
+  try {
+    await sendHersheyPrivateReply(commentId, message);
+    privateReplySent = true;
+  } catch (err) {
+    console.error("⚠️ [hershey] DM failed, attempting public reply");
+  }
+  try {
+    await replyHersheyPublicly(commentId, pickHersheyPublicReply(privateReplySent));
+  } catch (err) {
+    console.error(
+      "❌ [hershey] Public reply failed:",
+      err.response?.status,
+      JSON.stringify(err.response?.data || err.message)
+    );
+  }
+}
+
+async function sendHersheyPrivateReply(commentId, text) {
+  const url = `${GRAPH}/${HERSHEY_USER_ID}/messages`;
+  console.log("🚀 [hershey] sending DM via:", url);
+  try {
+    const { data } = await axios.post(
+      url,
+      { recipient: { comment_id: commentId }, message: { text } },
+      { params: { access_token: HERSHEY_TOKEN } }
+    );
+    console.log("📨 [hershey] DM sent:", JSON.stringify(data));
+  } catch (err) {
+    console.error(
+      "💥 [hershey] DM FAILED:",
+      err.response?.status,
+      JSON.stringify(err.response?.data)
+    );
+    throw err;
+  }
+}
+
+async function replyHersheyPublicly(commentId, message) {
+  const url = `${GRAPH}/${commentId}/replies`;
+  try {
+    await axios.post(url, null, {
+      params: { message, access_token: HERSHEY_TOKEN },
+    });
+    console.log("💬 [hershey] public reply posted");
+  } catch (err) {
+    console.error(
+      "⚠️ [hershey] public reply failed:",
+      err.response?.status,
+      JSON.stringify(err.response?.data)
+    );
   }
 }
