@@ -1,6 +1,7 @@
 // File: /api/webhook.js
 import axios from "axios";
 import { waitUntil } from "@vercel/functions";
+import { readFlags } from "../lib/flags.js";
 
 const {
   VERIFY_TOKEN,
@@ -8,12 +9,9 @@ const {
   IG_USER_ID,
   APP_LINK,
   WEBHOOK_PAUSED,
-  IG_PAUSED,
-  IG_DM_DISABLED,
   HERSHEY_USER_ID,
   HERSHEY_TOKEN,
   HERSHEY_APP_LINK,
-  HERSHEY_PAUSED,
 } = process.env;
 
 const truthy = (v) => {
@@ -72,16 +70,20 @@ export default async function handler(req, res) {
 
   // ---- POST: Comment events ----
   if (req.method === "POST") {
-    // Kill-switch: set WEBHOOK_PAUSED to any non-empty value in Vercel env
-    // to silently ack incoming events without sending DMs or replies.
-    const pausedRaw = (WEBHOOK_PAUSED ?? "").trim();
-    console.log(`🔧 WEBHOOK_PAUSED=${JSON.stringify(WEBHOOK_PAUSED)} (trimmed=${JSON.stringify(pausedRaw)})`);
-    if (pausedRaw && pausedRaw.toLowerCase() !== "false" && pausedRaw !== "0") {
-      console.log("⏸️ paused — acking without processing");
+    // Emergency global kill-switch via env var. The per-account toggles are
+    // in Redis (see flags.js); this env var lets you stop everything in one
+    // shot without depending on Redis being reachable.
+    if (truthy(WEBHOOK_PAUSED)) {
+      console.log("⏸️ WEBHOOK_PAUSED — acking without processing");
       return res.status(200).send("OK");
     }
 
     console.log("📥 RAW PAYLOAD:", JSON.stringify(req.body, null, 2));
+
+    // Per-account flags live in Upstash Redis (toggled via /api/admin).
+    // When Redis isn't configured, flags.js falls back to the env vars.
+    const flags = await readFlags();
+    console.log("🎛 flags:", JSON.stringify(flags));
 
     const entries = req.body?.entry || [];
     for (const entry of entries) {
@@ -114,20 +116,19 @@ export default async function handler(req, res) {
 
         console.log(`💬 ${username || fromId}: "${text}"`);
 
-        // Route to the right account handler. Per-account pause flags
-        // override only that account; WEBHOOK_PAUSED above is global.
+        // Route to the right account handler.
         if (ownerId === IG_USER_ID) {
-          if (truthy(IG_PAUSED)) {
-            console.log("⏸️ IG_PAUSED — skipping riddhi comment");
+          if (flags.riddhi_paused) {
+            console.log("⏸️ riddhi paused — skipping");
             continue;
           }
-          waitUntil(processComment({ commentId, username }));
+          waitUntil(processComment({ commentId, username, skipDM: flags.riddhi_dm_disabled }));
         } else if (ownerId === HERSHEY_USER_ID) {
-          if (truthy(HERSHEY_PAUSED)) {
-            console.log("⏸️ HERSHEY_PAUSED — skipping hershey comment");
+          if (flags.hershey_paused) {
+            console.log("⏸️ hershey paused — skipping");
             continue;
           }
-          waitUntil(processHersheyComment({ commentId, username }));
+          waitUntil(processHersheyComment({ commentId, username, skipDM: flags.hershey_dm_disabled }));
         } else {
           console.log(`⏭️ no handler for owner ${ownerId}`);
         }
@@ -140,10 +141,10 @@ export default async function handler(req, res) {
   return res.status(405).send("Method Not Allowed");
 }
 
-async function processComment({ commentId, username }) {
+async function processComment({ commentId, username, skipDM }) {
   let privateReplySent = false;
-  if (truthy(IG_DM_DISABLED)) {
-    console.log("⏭️ IG_DM_DISABLED — skipping DM, public reply only");
+  if (skipDM) {
+    console.log("⏭️ riddhi DMs disabled — public reply only");
   } else {
     const message = buildPersonalDM({ username });
     try {
@@ -231,14 +232,18 @@ function pickHersheyPublicReply(privateReplySent) {
   return pick(privateReplySent ? dmSentOpts : fallbackOpts).trim();
 }
 
-async function processHersheyComment({ commentId, username }) {
-  const message = buildHersheyDM({ username });
+async function processHersheyComment({ commentId, username, skipDM }) {
   let privateReplySent = false;
-  try {
-    await sendHersheyPrivateReply(commentId, message);
-    privateReplySent = true;
-  } catch (err) {
-    console.error("⚠️ [hershey] DM failed, attempting public reply");
+  if (skipDM) {
+    console.log("⏭️ [hershey] DMs disabled — public reply only");
+  } else {
+    const message = buildHersheyDM({ username });
+    try {
+      await sendHersheyPrivateReply(commentId, message);
+      privateReplySent = true;
+    } catch (err) {
+      console.error("⚠️ [hershey] DM failed, attempting public reply");
+    }
   }
   try {
     await replyHersheyPublicly(commentId, pickHersheyPublicReply(privateReplySent));
