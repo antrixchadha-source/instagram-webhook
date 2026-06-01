@@ -9,6 +9,7 @@ const {
   APP_LINK,
   WEBHOOK_PAUSED,
   IG_PAUSED,
+  IG_DM_DISABLED,
   HERSHEY_USER_ID,
   HERSHEY_TOKEN,
   HERSHEY_APP_LINK,
@@ -140,13 +141,17 @@ export default async function handler(req, res) {
 }
 
 async function processComment({ commentId, username }) {
-  const message = buildPersonalDM({ username });
   let privateReplySent = false;
-  try {
-    await sendPrivateReply(commentId, message);
-    privateReplySent = true;
-  } catch (err) {
-    console.error("⚠️ DM failed, will attempt public reply if possible");
+  if (truthy(IG_DM_DISABLED)) {
+    console.log("⏭️ IG_DM_DISABLED — skipping DM, public reply only");
+  } else {
+    const message = buildPersonalDM({ username });
+    try {
+      await sendPrivateReply(commentId, message);
+      privateReplySent = true;
+    } catch (err) {
+      console.error("⚠️ DM failed, will attempt public reply if possible");
+    }
   }
   try {
     await replyPublicly(commentId, pickPublicReply(username, privateReplySent));
