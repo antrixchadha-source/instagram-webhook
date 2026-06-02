@@ -10,28 +10,33 @@ const HTML = `<!DOCTYPE html>
     * { box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif; max-width: 640px; margin: 32px auto; padding: 0 20px; color: #111; }
     h1 { font-size: 22px; margin: 0 0 6px; }
+    h2 { font-size: 16px; margin: 12px 0; color: #444; }
+    h3 { font-size: 13px; font-weight: 600; color: #666; text-transform: uppercase; letter-spacing: .04em; margin: 32px 0 12px; }
     .hint { font-size: 12px; color: #888; margin-bottom: 24px; }
-    .card { border: 1px solid #e3e3e8; border-radius: 12px; padding: 6px 20px; margin-bottom: 16px; background: #fff; }
-    .card h2 { font-size: 16px; margin: 12px 0 0; }
-    .card .meta { font-size: 12px; color: #888; margin: 4px 0 8px; }
-    .row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-top: 1px solid #f3f3f5; gap: 16px; }
-    .row .label { font-size: 14px; }
-    .row .desc { font-size: 12px; color: #888; margin-top: 2px; }
+    .account { border: 1px solid #e3e3e8; border-radius: 12px; padding: 6px 20px; margin-bottom: 16px; background: #fff; }
+    .account .meta { font-size: 12px; color: #888; margin: -4px 0 8px; }
+    .toggle { display: flex; align-items: center; justify-content: space-between; padding: 14px 0; border-bottom: 1px solid #f3f3f5; gap: 16px; }
+    .toggle:last-child { border-bottom: none; }
+    .toggle .label { font-size: 14px; font-weight: 500; }
+    .toggle .desc { font-size: 12px; color: #888; margin-top: 2px; }
     .switch { position: relative; width: 44px; height: 26px; flex-shrink: 0; }
     .switch input { opacity: 0; width: 0; height: 0; }
     .slider { position: absolute; cursor: pointer; inset: 0; background: #d0d0d5; border-radius: 26px; transition: .2s; }
     .slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 3px; top: 3px; background: white; border-radius: 50%; transition: .2s; }
     input:checked + .slider { background: #2a82ff; }
     input:checked + .slider:before { transform: translateX(18px); }
+    input:disabled + .slider { opacity: .5; cursor: not-allowed; }
     button { font: inherit; padding: 8px 14px; border-radius: 8px; border: 1px solid #ccd; background: #fff; cursor: pointer; }
     button.primary { background: #111; color: #fff; border-color: #111; }
     button.danger { color: #c0392b; border-color: #e8c5c0; }
     button:hover:not(:disabled) { opacity: .9; }
     button:disabled { opacity: .5; cursor: not-allowed; }
     .actions { display: flex; gap: 8px; padding: 12px 0; }
-    .empty { text-align: center; color: #888; padding: 32px 0; font-size: 14px; }
+    .empty { text-align: center; color: #999; padding: 24px 0; font-size: 13px; font-style: italic; }
     .status { font-size: 12px; color: #888; text-align: center; margin: 16px 0; min-height: 18px; }
     .status.err { color: #c0392b; }
+    .add-btn { display: block; width: 100%; padding: 12px; border: 1px dashed #c8c8d0; border-radius: 12px; background: transparent; color: #444; font-size: 14px; cursor: pointer; margin-bottom: 16px; }
+    .add-btn:hover { background: #fafafb; border-color: #2a82ff; color: #2a82ff; }
     dialog { border: none; border-radius: 12px; padding: 0; max-width: 480px; width: calc(100% - 32px); box-shadow: 0 20px 60px rgba(0,0,0,.18); }
     dialog::backdrop { background: rgba(0,0,0,.4); }
     dialog form { padding: 20px; display: flex; flex-direction: column; gap: 12px; }
@@ -41,15 +46,50 @@ const HTML = `<!DOCTYPE html>
     dialog textarea { resize: vertical; min-height: 60px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
     dialog .desc { font-size: 11px; color: #888; margin-top: 4px; }
     dialog .footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
-    .add-btn { display: block; width: 100%; padding: 12px; border: 1px dashed #c8c8d0; border-radius: 12px; background: transparent; color: #444; font-size: 14px; cursor: pointer; margin-bottom: 16px; }
-    .add-btn:hover { background: #fafafb; border-color: #2a82ff; color: #2a82ff; }
   </style>
 </head>
 <body>
   <h1>Instagram Webhook Admin</h1>
   <p class="hint">Toggles apply on the next incoming webhook event. No redeploy needed.</p>
 
-  <div id="accounts"></div>
+  <div class="account">
+    <h2>riddhiii.travels</h2>
+    <div class="toggle">
+      <div>
+        <div class="label">Paused</div>
+        <div class="desc">Ignore all incoming comments. No DM, no reply.</div>
+      </div>
+      <label class="switch"><input type="checkbox" data-flag="riddhi_paused" /><span class="slider"></span></label>
+    </div>
+    <div class="toggle">
+      <div>
+        <div class="label">Skip DMs</div>
+        <div class="desc">Only post the public reply, don't send a private DM.</div>
+      </div>
+      <label class="switch"><input type="checkbox" data-flag="riddhi_dm_disabled" /><span class="slider"></span></label>
+    </div>
+  </div>
+
+  <div class="account">
+    <h2>hersheytravels2</h2>
+    <div class="toggle">
+      <div>
+        <div class="label">Paused</div>
+        <div class="desc">Ignore all incoming comments. No DM, no reply.</div>
+      </div>
+      <label class="switch"><input type="checkbox" data-flag="hershey_paused" /><span class="slider"></span></label>
+    </div>
+    <div class="toggle">
+      <div>
+        <div class="label">Skip DMs</div>
+        <div class="desc">Only post the public reply, don't send a private DM.</div>
+      </div>
+      <label class="switch"><input type="checkbox" data-flag="hershey_dm_disabled" /><span class="slider"></span></label>
+    </div>
+  </div>
+
+  <h3>More accounts</h3>
+  <div id="extra-accounts"><div class="empty">No additional accounts yet.</div></div>
   <button class="add-btn" id="add-btn">+ Add Account</button>
 
   <div class="status" id="status">Loading…</div>
@@ -75,7 +115,7 @@ const HTML = `<!DOCTYPE html>
       <div>
         <label for="brand_mention">Brand Mention (optional)</label>
         <input id="brand_mention" name="brand_mention" placeholder="@yourbrand" />
-        <div class="desc">If set, the public reply mentions this handle (e.g. "It's @yourbrand 📩"). Leave blank for neutral copy.</div>
+        <div class="desc">If set, the public reply mentions this handle. Leave blank for neutral copy.</div>
       </div>
       <div class="footer">
         <button type="button" id="add-cancel">Cancel</button>
@@ -86,15 +126,16 @@ const HTML = `<!DOCTYPE html>
 
   <script>
     const $status = document.getElementById('status');
-    const $accounts = document.getElementById('accounts');
+    const $extra = document.getElementById('extra-accounts');
+    const flagInputs = document.querySelectorAll('input[data-flag]');
     const $addBtn = document.getElementById('add-btn');
     const $dialog = document.getElementById('add-dialog');
     const $form = document.getElementById('add-form');
     const $submit = document.getElementById('add-submit');
     const $cancel = document.getElementById('add-cancel');
 
-    function setStatus(msg, isError = false) {
-      $status.textContent = msg;
+    function setStatus(text, isError = false) {
+      $status.textContent = text;
       $status.classList.toggle('err', isError);
     }
 
@@ -102,28 +143,27 @@ const HTML = `<!DOCTYPE html>
       return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     }
 
-    function renderAccount(a) {
+    function renderExtraAccount(a) {
       const id = escapeHtml(a.id);
       const username = escapeHtml(a.username);
-      const appLink = escapeHtml(a.app_link);
       const brand = a.brand_mention ? \`brand: \${escapeHtml(a.brand_mention)} · \` : '';
       return \`
-        <div class="card" data-id="\${id}">
+        <div class="account" data-id="\${id}">
           <h2>@\${username}</h2>
           <div class="meta">\${brand}id: \${id} · token: \${escapeHtml(a.access_token_preview || 'n/a')}</div>
-          <div class="row">
+          <div class="toggle">
             <div>
               <div class="label">Paused</div>
               <div class="desc">Ignore all incoming comments. No DM, no reply.</div>
             </div>
-            <label class="switch"><input type="checkbox" data-field="paused" \${a.paused ? 'checked' : ''} /><span class="slider"></span></label>
+            <label class="switch"><input type="checkbox" data-extra="paused" \${a.paused ? 'checked' : ''} /><span class="slider"></span></label>
           </div>
-          <div class="row">
+          <div class="toggle">
             <div>
               <div class="label">Skip DMs</div>
               <div class="desc">Only post the public reply, don't send a private DM.</div>
             </div>
-            <label class="switch"><input type="checkbox" data-field="dm_disabled" \${a.dm_disabled ? 'checked' : ''} /><span class="slider"></span></label>
+            <label class="switch"><input type="checkbox" data-extra="dm_disabled" \${a.dm_disabled ? 'checked' : ''} /><span class="slider"></span></label>
           </div>
           <div class="actions">
             <button class="danger" data-action="delete">Remove account</button>
@@ -132,29 +172,56 @@ const HTML = `<!DOCTYPE html>
       \`;
     }
 
+    async function loadFlags() {
+      const res = await fetch('/api/admin/state');
+      if (!res.ok) throw new Error('flags HTTP ' + res.status);
+      const flags = await res.json();
+      for (const input of flagInputs) input.checked = !!flags[input.dataset.flag];
+    }
+
+    async function loadAccounts() {
+      const res = await fetch('/api/admin/accounts');
+      if (!res.ok) throw new Error('accounts HTTP ' + res.status);
+      const accounts = await res.json();
+      if (!accounts.length) {
+        $extra.innerHTML = '<div class="empty">No additional accounts yet.</div>';
+      } else {
+        $extra.innerHTML = accounts.map(renderExtraAccount).join('');
+      }
+      bindExtraEvents();
+    }
+
     async function load() {
       try {
-        const res = await fetch('/api/admin/accounts');
-        if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + await res.text());
-        const accounts = await res.json();
-        if (!accounts.length) {
-          $accounts.innerHTML = '<div class="empty">No accounts yet — click + Add Account below to get started.</div>';
-        } else {
-          $accounts.innerHTML = accounts.map(renderAccount).join('');
-        }
-        bindCardEvents();
+        await Promise.all([loadFlags(), loadAccounts()]);
         setStatus('Synced at ' + new Date().toLocaleTimeString());
       } catch (err) {
         setStatus('Failed to load: ' + err.message, true);
       }
     }
 
-    function bindCardEvents() {
-      for (const input of $accounts.querySelectorAll('input[data-field]')) {
+    async function toggleFlag(flag, value) {
+      setStatus('Saving…');
+      try {
+        const res = await fetch('/api/admin/toggle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: flag, value }),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        setStatus('Saved at ' + new Date().toLocaleTimeString());
+      } catch (err) {
+        setStatus('Save failed: ' + err.message, true);
+        loadFlags();
+      }
+    }
+
+    function bindExtraEvents() {
+      for (const input of $extra.querySelectorAll('input[data-extra]')) {
         input.addEventListener('change', async () => {
-          const card = input.closest('.card');
+          const card = input.closest('.account');
           const id = card.dataset.id;
-          const field = input.dataset.field;
+          const field = input.dataset.extra;
           const value = input.checked;
           setStatus('Saving…');
           try {
@@ -167,20 +234,20 @@ const HTML = `<!DOCTYPE html>
             setStatus('Saved at ' + new Date().toLocaleTimeString());
           } catch (err) {
             setStatus('Save failed: ' + err.message, true);
-            input.checked = !value; // revert
+            input.checked = !value;
           }
         });
       }
-      for (const btn of $accounts.querySelectorAll('button[data-action="delete"]')) {
+      for (const btn of $extra.querySelectorAll('button[data-action="delete"]')) {
         btn.addEventListener('click', async () => {
-          const card = btn.closest('.card');
+          const card = btn.closest('.account');
           const id = card.dataset.id;
-          if (!confirm('Remove this account from the dashboard? The IG account stays connected on the Meta side — only the local config is deleted.')) return;
+          if (!confirm('Remove this account from the dashboard? The IG account stays connected on the Meta side — only this local config is deleted.')) return;
           setStatus('Removing…');
           try {
             const res = await fetch(\`/api/admin/accounts?id=\${encodeURIComponent(id)}\`, { method: 'DELETE' });
             if (!res.ok) throw new Error(await res.text());
-            await load();
+            await loadAccounts();
           } catch (err) {
             setStatus('Remove failed: ' + err.message, true);
           }
@@ -188,11 +255,14 @@ const HTML = `<!DOCTYPE html>
       }
     }
 
+    for (const input of flagInputs) {
+      input.addEventListener('change', () => toggleFlag(input.dataset.flag, input.checked));
+    }
+
     $addBtn.addEventListener('click', () => {
       $form.reset();
       $dialog.showModal();
     });
-
     $cancel.addEventListener('click', () => $dialog.close());
 
     $form.addEventListener('submit', async (e) => {
@@ -215,7 +285,7 @@ const HTML = `<!DOCTYPE html>
         });
         if (!res.ok) throw new Error(await res.text());
         $dialog.close();
-        await load();
+        await loadAccounts();
         setStatus('Account added at ' + new Date().toLocaleTimeString());
       } catch (err) {
         setStatus('Add failed: ' + err.message, true);
