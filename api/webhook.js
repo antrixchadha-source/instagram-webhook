@@ -37,22 +37,11 @@ const linkLines = [
   (link) => `This is the link :\n${link}`,
 ];
 
-const closers = [
-  `Hope it helps 🙂`,
-  `Let me know what you think!`,
-  ``,
-];
-
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
 function buildPersonalDM({ username }) {
   const name = username ? `@${username}` : "there";
-  const lines = [
-    pick(greetings)(name),
-    pick(linkLines)(APP_LINK),
-    pick(closers),
-  ].filter(Boolean);
-  return lines.join("\n\n");
+  return [pick(greetings)(name), pick(linkLines)(APP_LINK)].join("\n\n");
 }
 
 export default async function handler(req, res) {
@@ -232,9 +221,7 @@ async function replyPublicly(commentId, message) {
 
 function buildHersheyDM({ username }) {
   const name = username ? `@${username}` : "there";
-  return [pick(greetings)(name), pick(linkLines)(HERSHEY_APP_LINK), pick(closers)]
-    .filter(Boolean)
-    .join("\n\n");
+  return [pick(greetings)(name), pick(linkLines)(HERSHEY_APP_LINK)].join("\n\n");
 }
 
 function pickHersheyPublicReply(privateReplySent) {
@@ -317,9 +304,7 @@ async function replyHersheyPublicly(commentId, message) {
 
 function buildAccountDM(username, appLink) {
   const name = username ? `@${username}` : "there";
-  return [pick(greetings)(name), pick(linkLines)(appLink), pick(closers)]
-    .filter(Boolean)
-    .join("\n\n");
+  return [pick(greetings)(name), pick(linkLines)(appLink)].join("\n\n");
 }
 
 function pickAccountPublicReply(username, privateReplySent, brandMention) {
