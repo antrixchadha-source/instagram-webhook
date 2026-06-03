@@ -288,21 +288,32 @@ const HTML = `<!DOCTYPE html>
           $linksBody.innerHTML = '<div class="empty">No recent media returned by the Graph API.</div>';
           return;
         }
-        $linksBody.innerHTML = data.media.map((m) => {
+        // Un-linked posts first, then linked. Within each group, Graph already
+        // gives us newest first.
+        const unlinked = data.media.filter((m) => !data.links[m.id]);
+        const linked = data.media.filter((m) => data.links[m.id]);
+        const ordered = [...unlinked, ...linked];
+        $linksBody.innerHTML = ordered.map((m) => {
+          const isLinked = !!data.links[m.id];
+          const currentLink = data.links[m.id] || '';
           const caption = (m.caption || '').replace(/\\s+/g, ' ').trim();
           const shortCap = caption.length > 80 ? caption.slice(0, 80) + '…' : caption;
-          const currentLink = data.links[m.id] || '';
+          const thumb = m.thumbnail_url || m.media_url || '';
           return \`
-            <div class="account" data-media-id="\${escapeHtml(m.id)}" style="padding:10px 14px;margin:0;">
-              <div style="font-size:12px;color:#888;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-                <span>\${escapeHtml(m.media_type || '')}</span>
-                <span>·</span>
-                <a href="\${escapeHtml(m.permalink || '#')}" target="_blank" rel="noopener" style="color:#2a82ff;">\${escapeHtml(m.id)}</a>
-              </div>
-              <div style="font-size:13px;margin:4px 0 8px;">\${escapeHtml(shortCap)}</div>
-              <div style="display:flex;gap:8px;align-items:center;">
-                <input type="url" placeholder="(uses account default)" value="\${escapeHtml(currentLink)}" data-post-link style="flex:1;padding:6px 10px;border:1px solid #ccd;border-radius:6px;font-size:13px;" />
-                <button data-clear type="button" \${currentLink ? '' : 'disabled'}>Clear</button>
+            <div data-media-id="\${escapeHtml(m.id)}" style="display:flex;gap:12px;padding:10px;border:1px solid \${isLinked ? '#cde8ff' : '#e3e3e8'};border-radius:8px;background:\${isLinked ? '#f5fbff' : '#fff'};">
+              <div style="flex-shrink:0;width:56px;height:56px;border-radius:6px;background:#f0f0f3 center/cover no-repeat;\${thumb ? \`background-image:url('\${escapeHtml(thumb)}');\` : ''}"></div>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:11px;color:#888;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+                  <span>\${escapeHtml(m.media_type || '')}</span>
+                  \${isLinked ? '<span style="color:#2a82ff;font-weight:600;">· Linked ✓</span>' : ''}
+                  <span>·</span>
+                  <a href="\${escapeHtml(m.permalink || '#')}" target="_blank" rel="noopener" style="color:#2a82ff;">view on IG</a>
+                </div>
+                <div style="font-size:12px;margin:4px 0 6px;color:#444;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">\${escapeHtml(shortCap || '(no caption)')}</div>
+                <div style="display:flex;gap:6px;align-items:center;">
+                  <input type="url" placeholder="(uses account default)" value="\${escapeHtml(currentLink)}" data-post-link style="flex:1;padding:5px 8px;border:1px solid #ccd;border-radius:5px;font-size:12px;min-width:0;" />
+                  <button data-clear type="button" \${currentLink ? '' : 'disabled'} style="font-size:12px;padding:5px 8px;">Clear</button>
+                </div>
               </div>
             </div>
           \`;
