@@ -108,9 +108,9 @@ const HTML = `<!DOCTYPE html>
         <div class="desc">Long-lived IG access token. Must have basic + comments + messages permissions.</div>
       </div>
       <div>
-        <label for="app_link">App Link</label>
-        <input id="app_link" name="app_link" required placeholder="https://example.com/?ref=handle" />
-        <div class="desc">Sent in the DM body.</div>
+        <label for="app_link">Default App Link (optional)</label>
+        <input id="app_link" name="app_link" placeholder="https://example.com/?ref=handle" />
+        <div class="desc">Used when a post has no per-post link override. Leave blank to require a per-post link on every reel (no auto-DM until one is set).</div>
       </div>
       <div>
         <label for="brand_mention">Brand Mention (optional)</label>
@@ -283,7 +283,10 @@ const HTML = `<!DOCTYPE html>
         const res = await fetch(\`/api/admin/post-links?account_id=\${encodeURIComponent(accountId)}\`);
         if (!res.ok) throw new Error(await res.text());
         const data = await res.json();
-        $linksSubtitle.textContent = \`@\${data.account.username} · default link: \${data.account.app_link}\${data.media_error ? ' · Media fetch failed: ' + data.media_error : ''}\`;
+        const defaultText = data.account.app_link
+          ? \`default link: \${data.account.app_link}\`
+          : 'no default link — reels without a link below won\\'t get auto-DMs';
+        $linksSubtitle.textContent = \`@\${data.account.username} · \${defaultText}\${data.media_error ? ' · Media fetch failed: ' + data.media_error : ''}\`;
         if (!data.media.length) {
           $linksBody.innerHTML = '<div class="empty">No recent media returned by the Graph API.</div>';
           return;

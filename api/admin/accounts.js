@@ -28,8 +28,8 @@ export default async function handler(req, res) {
 
     if (req.method === "POST") {
       const { ig_user_id, access_token, app_link, brand_mention } = req.body || {};
-      if (!ig_user_id || !access_token || !app_link) {
-        return res.status(400).send("ig_user_id, access_token, and app_link are required");
+      if (!ig_user_id || !access_token) {
+        return res.status(400).send("ig_user_id and access_token are required");
       }
 
       // 1. Verify the token by calling /me. Username comes from here.
@@ -54,7 +54,7 @@ export default async function handler(req, res) {
         id: ig_user_id,
         username: me.username || ig_user_id,
         access_token,
-        app_link,
+        app_link: app_link?.trim() || null,
         brand_mention: brand_mention?.trim() || null,
         paused: false,
         dm_disabled: false,

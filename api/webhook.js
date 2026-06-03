@@ -337,24 +337,33 @@ function pickAccountPublicReply(username, privateReplySent, brandMention) {
 }
 
 async function processAccountComment(account, { commentId, username, mediaId }) {
+  // Resolve the link: per-post override first, then account default. If
+  // neither is set, this post is effectively un-configured — skip both the
+  // DM and the public reply so the account doesn't engage on reels the
+  // operator hasn't wired up yet.
+  let link = null;
+  if (mediaId) {
+    try {
+      const postLinks = await getPostLinkMap(account.id);
+      const override = postLinks.get(String(mediaId));
+      if (override) {
+        link = override;
+        console.log(`🔗 [${account.username}] using per-post link for media ${mediaId}`);
+      }
+    } catch (err) {
+      console.error(`⚠️ [${account.username}] post_links lookup failed: ${err.message}`);
+    }
+  }
+  if (!link && account.app_link) link = account.app_link;
+  if (!link) {
+    console.log(`⏭️ [${account.username}] no link configured for media ${mediaId} — skipping DM and reply`);
+    return;
+  }
+
   let privateReplySent = false;
   if (account.dm_disabled) {
     console.log(`⏭️ [${account.username}] DMs disabled — public reply only`);
   } else {
-    // Look up a per-post link override; fall back to account.app_link.
-    let link = account.app_link;
-    if (mediaId) {
-      try {
-        const postLinks = await getPostLinkMap(account.id);
-        const override = postLinks.get(String(mediaId));
-        if (override) {
-          link = override;
-          console.log(`🔗 [${account.username}] using per-post link for media ${mediaId}`);
-        }
-      } catch (err) {
-        console.error(`⚠️ [${account.username}] post_links lookup failed: ${err.message}`);
-      }
-    }
     const message = buildAccountDM(username, link);
     try {
       await sendAccountPrivateReply(account, commentId, message);
