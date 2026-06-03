@@ -3,6 +3,7 @@ import axios from "axios";
 import { waitUntil } from "@vercel/functions";
 import { readFlags } from "../lib/flags.js";
 import { getAccountMap } from "../lib/accounts.js";
+import { getPostLinkMap } from "../lib/post_links.js";
 
 const {
   VERIFY_TOKEN,
@@ -95,6 +96,7 @@ export default async function handler(req, res) {
         const fromId = c.from?.id;
         const username = c.from?.username;
         const parentId = c.parent_id;
+        const mediaId = c.media?.id;
         const text = c.text || "";
 
         if (!commentId) {
@@ -138,7 +140,7 @@ export default async function handler(req, res) {
             console.log(`⏸️ [${extra.username}] paused — skipping`);
             continue;
           }
-          waitUntil(processAccountComment(extra, { commentId, username }));
+          waitUntil(processAccountComment(extra, { commentId, username, mediaId }));
         }
       }
     }
@@ -334,12 +336,26 @@ function pickAccountPublicReply(username, privateReplySent, brandMention) {
   return pick(privateReplySent ? opts : fallbackOpts).trim();
 }
 
-async function processAccountComment(account, { commentId, username }) {
+async function processAccountComment(account, { commentId, username, mediaId }) {
   let privateReplySent = false;
   if (account.dm_disabled) {
     console.log(`⏭️ [${account.username}] DMs disabled — public reply only`);
   } else {
-    const message = buildAccountDM(username, account.app_link);
+    // Look up a per-post link override; fall back to account.app_link.
+    let link = account.app_link;
+    if (mediaId) {
+      try {
+        const postLinks = await getPostLinkMap(account.id);
+        const override = postLinks.get(String(mediaId));
+        if (override) {
+          link = override;
+          console.log(`🔗 [${account.username}] using per-post link for media ${mediaId}`);
+        }
+      } catch (err) {
+        console.error(`⚠️ [${account.username}] post_links lookup failed: ${err.message}`);
+      }
+    }
+    const message = buildAccountDM(username, link);
     try {
       await sendAccountPrivateReply(account, commentId, message);
       privateReplySent = true;

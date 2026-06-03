@@ -124,6 +124,17 @@ const HTML = `<!DOCTYPE html>
     </form>
   </dialog>
 
+  <dialog id="links-dialog">
+    <div style="padding:20px;display:flex;flex-direction:column;gap:12px;">
+      <h2 style="margin:0;font-size:18px;">Per-post link overrides</h2>
+      <div class="desc" id="links-subtitle" style="font-size:12px;color:#888;"></div>
+      <div id="links-body" style="max-height:60vh;overflow:auto;display:flex;flex-direction:column;gap:8px;"></div>
+      <div class="footer" style="display:flex;justify-content:flex-end;">
+        <button type="button" id="links-close" class="primary">Done</button>
+      </div>
+    </div>
+  </dialog>
+
   <script>
     const $status = document.getElementById('status');
     const $extra = document.getElementById('extra-accounts');
@@ -166,6 +177,7 @@ const HTML = `<!DOCTYPE html>
             <label class="switch"><input type="checkbox" data-extra="dm_disabled" \${a.dm_disabled ? 'checked' : ''} /><span class="slider"></span></label>
           </div>
           <div class="actions">
+            <button data-action="post-links">Post links</button>
             <button class="danger" data-action="delete">Remove account</button>
           </div>
         </div>
@@ -248,6 +260,97 @@ const HTML = `<!DOCTYPE html>
             const res = await fetch(\`/api/admin/accounts?id=\${encodeURIComponent(id)}\`, { method: 'DELETE' });
             if (!res.ok) throw new Error(await res.text());
             await loadAccounts();
+          } catch (err) {
+            setStatus('Remove failed: ' + err.message, true);
+          }
+        });
+      }
+      for (const btn of $extra.querySelectorAll('button[data-action="post-links"]')) {
+        btn.addEventListener('click', () => openPostLinks(btn.closest('.account').dataset.id));
+      }
+    }
+
+    const $linksDialog = document.getElementById('links-dialog');
+    const $linksBody = document.getElementById('links-body');
+    const $linksSubtitle = document.getElementById('links-subtitle');
+    document.getElementById('links-close').addEventListener('click', () => $linksDialog.close());
+
+    async function openPostLinks(accountId) {
+      $linksBody.innerHTML = '<div class="empty">Loading recent posts…</div>';
+      $linksSubtitle.textContent = '';
+      $linksDialog.showModal();
+      try {
+        const res = await fetch(\`/api/admin/post-links?account_id=\${encodeURIComponent(accountId)}\`);
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        $linksSubtitle.textContent = \`@\${data.account.username} · default link: \${data.account.app_link}\${data.media_error ? ' · Media fetch failed: ' + data.media_error : ''}\`;
+        if (!data.media.length) {
+          $linksBody.innerHTML = '<div class="empty">No recent media returned by the Graph API.</div>';
+          return;
+        }
+        $linksBody.innerHTML = data.media.map((m) => {
+          const caption = (m.caption || '').replace(/\\s+/g, ' ').trim();
+          const shortCap = caption.length > 80 ? caption.slice(0, 80) + '…' : caption;
+          const currentLink = data.links[m.id] || '';
+          return \`
+            <div class="account" data-media-id="\${escapeHtml(m.id)}" style="padding:10px 14px;margin:0;">
+              <div style="font-size:12px;color:#888;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                <span>\${escapeHtml(m.media_type || '')}</span>
+                <span>·</span>
+                <a href="\${escapeHtml(m.permalink || '#')}" target="_blank" rel="noopener" style="color:#2a82ff;">\${escapeHtml(m.id)}</a>
+              </div>
+              <div style="font-size:13px;margin:4px 0 8px;">\${escapeHtml(shortCap)}</div>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <input type="url" placeholder="(uses account default)" value="\${escapeHtml(currentLink)}" data-post-link style="flex:1;padding:6px 10px;border:1px solid #ccd;border-radius:6px;font-size:13px;" />
+                <button data-clear type="button" \${currentLink ? '' : 'disabled'}>Clear</button>
+              </div>
+            </div>
+          \`;
+        }).join('');
+        bindPostLinkEvents(accountId);
+      } catch (err) {
+        $linksBody.innerHTML = '<div class="empty" style="color:#c0392b;">Failed: ' + escapeHtml(err.message) + '</div>';
+      }
+    }
+
+    function bindPostLinkEvents(accountId) {
+      for (const input of $linksBody.querySelectorAll('input[data-post-link]')) {
+        let original = input.value;
+        const card = input.closest('[data-media-id]');
+        const mediaId = card.dataset.mediaId;
+        const clearBtn = card.querySelector('button[data-clear]');
+        async function save() {
+          const value = input.value.trim();
+          if (value === original) return;
+          if (!value) return; // empty doesn't save; use Clear to delete
+          setStatus('Saving…');
+          try {
+            const res = await fetch('/api/admin/post-links', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ account_id: accountId, media_id: mediaId, link: value }),
+            });
+            if (!res.ok) throw new Error(await res.text());
+            original = value;
+            clearBtn.disabled = false;
+            setStatus('Saved at ' + new Date().toLocaleTimeString());
+          } catch (err) {
+            setStatus('Save failed: ' + err.message, true);
+            input.value = original;
+          }
+        }
+        input.addEventListener('blur', save);
+        input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); });
+        clearBtn.addEventListener('click', async () => {
+          if (!original) return;
+          setStatus('Removing…');
+          try {
+            const res = await fetch(\`/api/admin/post-links?account_id=\${encodeURIComponent(accountId)}&media_id=\${encodeURIComponent(mediaId)}\`, { method: 'DELETE' });
+            if (!res.ok) throw new Error(await res.text());
+            input.value = '';
+            original = '';
+            clearBtn.disabled = true;
+            setStatus('Removed at ' + new Date().toLocaleTimeString());
           } catch (err) {
             setStatus('Remove failed: ' + err.message, true);
           }
