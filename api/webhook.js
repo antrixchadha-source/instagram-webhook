@@ -7,9 +7,6 @@ import { getPostLinkMap } from "../lib/post_links.js";
 
 const {
   VERIFY_TOKEN,
-  IG_ACCESS_TOKEN,
-  IG_USER_ID,
-  APP_LINK,
   WEBHOOK_PAUSED,
   HERSHEY_USER_ID,
   HERSHEY_TOKEN,
@@ -40,9 +37,25 @@ const linkLines = [
 
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
-function buildPersonalDM({ username }) {
-  const name = username ? `@${username}` : "there";
-  return [pick(greetings)(name), pick(linkLines)(APP_LINK)].join("\n\n");
+// 2534025 is overloaded — it covers legitimately invalid cases (old comment,
+// already-replied, etc.) AND a race condition where Meta's webhook service
+// delivers the event before its messaging service has indexed the comment.
+// Retry with backoff so transient races recover automatically. Total wait
+// budget across retries: ~38s, fits inside the 60s function maxDuration.
+const DM_RETRY_DELAYS_MS = [3000, 10000, 25000];
+async function sendDMWithRetry(label, doPost) {
+  for (let attempt = 0; attempt <= DM_RETRY_DELAYS_MS.length; attempt++) {
+    try {
+      return await doPost();
+    } catch (err) {
+      const subcode = err.response?.data?.error?.error_subcode;
+      const last = attempt === DM_RETRY_DELAYS_MS.length;
+      if (subcode !== 2534025 || last) throw err;
+      const wait = DM_RETRY_DELAYS_MS[attempt];
+      console.log(`⏳ ${label} hit 2534025, retrying in ${wait / 1000}s (attempt ${attempt + 2}/${DM_RETRY_DELAYS_MS.length + 1})`);
+      await new Promise((r) => setTimeout(r, wait));
+    }
+  }
 }
 
 export default async function handler(req, res) {
@@ -110,7 +123,7 @@ export default async function handler(req, res) {
         }
 
         // Skip our own comments to avoid loops
-        if (fromId === IG_USER_ID || fromId === ownerId) {
+        if (fromId === ownerId) {
           console.log("⏭️ Own comment, skipping");
           continue;
         }
@@ -118,13 +131,7 @@ export default async function handler(req, res) {
         console.log(`💬 ${username || fromId}: "${text}"`);
 
         // Route to the right account handler.
-        if (ownerId === IG_USER_ID) {
-          if (flags.riddhi_paused) {
-            console.log("⏸️ riddhi paused — skipping");
-            continue;
-          }
-          waitUntil(processComment({ commentId, username, skipDM: flags.riddhi_dm_disabled }));
-        } else if (ownerId === HERSHEY_USER_ID) {
+        if (ownerId === HERSHEY_USER_ID) {
           if (flags.hershey_paused) {
             console.log("⏸️ hershey paused — skipping");
             continue;
@@ -149,72 +156,6 @@ export default async function handler(req, res) {
   }
 
   return res.status(405).send("Method Not Allowed");
-}
-
-async function processComment({ commentId, username, skipDM }) {
-  let privateReplySent = false;
-  if (skipDM) {
-    console.log("⏭️ riddhi DMs disabled — public reply only");
-  } else {
-    const message = buildPersonalDM({ username });
-    try {
-      await sendPrivateReply(commentId, message);
-      privateReplySent = true;
-    } catch (err) {
-      console.error("⚠️ DM failed, will attempt public reply if possible");
-    }
-  }
-  try {
-    await replyPublicly(commentId, pickPublicReply(username, privateReplySent));
-  } catch (err) {
-    console.error("❌ Public reply failed:", err.response?.status, JSON.stringify(err.response?.data || err.message));
-  }
-}
-
-function pickPublicReply(username, private_reply_sent) {
-  const opts = [
-    `Just sent you a DM, it's @glide.xyz  ${username ? "@" + username : ""} 📩`,
-    `It's @glide.xyz ,Check your DMs! 💌`,
-    `DM sent your way 🚀, It's @glide.xyz `,
-    `Replied in your inbox, check @glide.xyz ✨`,
-  ];
-  const fallbackOpts = [
-    `It's @glide.xyz  ${username ? "@" + username : ""} 📩`,
-    `Check out @glide.xyz ✨`,
-  ];
-  if (private_reply_sent) {
-    return pick(opts).trim();
-  }
-  return pick(fallbackOpts).trim();
-}
-
-async function sendPrivateReply(commentId, text) {
-  const url = `${GRAPH}/${IG_USER_ID}/messages`;
-  console.log("🚀 Sending DM via:", url);
-  try {
-    const { data } = await axios.post(
-      url,
-      { recipient: { comment_id: commentId }, message: { text } },
-      { params: { access_token: IG_ACCESS_TOKEN } }
-    );
-    console.log("📨 DM sent successfully:", JSON.stringify(data));
-  } catch (err) {
-    console.error("💥 DM send FAILED:", err.response?.status, JSON.stringify(err.response?.data));
-    throw err;
-  }
-}
-
-async function replyPublicly(commentId, message) {
-  const url = `${GRAPH}/${commentId}/replies`;
-  try {
-    await axios.post(url, null, {
-      params: { message, access_token: IG_ACCESS_TOKEN },
-    });
-    console.log("💬 Public reply posted");
-  } catch (err) {
-    console.error("⚠️ Public reply failed:", err.response?.status, JSON.stringify(err.response?.data));
-    // Don't throw — public reply is optional
-  }
 }
 
 // ============================================================
@@ -268,10 +209,12 @@ async function sendHersheyPrivateReply(commentId, text) {
   const url = `${GRAPH}/${HERSHEY_USER_ID}/messages`;
   console.log("🚀 [hershey] sending DM via:", url);
   try {
-    const { data } = await axios.post(
-      url,
-      { recipient: { comment_id: commentId }, message: { text } },
-      { params: { access_token: HERSHEY_TOKEN } }
+    const { data } = await sendDMWithRetry("[hershey] DM", () =>
+      axios.post(
+        url,
+        { recipient: { comment_id: commentId }, message: { text } },
+        { params: { access_token: HERSHEY_TOKEN } }
+      )
     );
     console.log("📨 [hershey] DM sent:", JSON.stringify(data));
   } catch (err) {
@@ -388,10 +331,12 @@ async function sendAccountPrivateReply(account, commentId, text) {
   const url = `${GRAPH}/${account.id}/messages`;
   console.log(`🚀 [${account.username}] sending DM via: ${url}`);
   try {
-    const { data } = await axios.post(
-      url,
-      { recipient: { comment_id: commentId }, message: { text } },
-      { params: { access_token: account.access_token } }
+    const { data } = await sendDMWithRetry(`[${account.username}] DM`, () =>
+      axios.post(
+        url,
+        { recipient: { comment_id: commentId }, message: { text } },
+        { params: { access_token: account.access_token } }
+      )
     );
     console.log(`📨 [${account.username}] DM sent:`, JSON.stringify(data));
   } catch (err) {
