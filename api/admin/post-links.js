@@ -1,4 +1,4 @@
-import { listAccounts } from "../../lib/accounts.js";
+import { listAccounts, effectiveAppLink } from "../../lib/accounts.js";
 import { listPostLinks, upsertPostLink, deletePostLink } from "../../lib/post_links.js";
 import { fetchRecentMedia } from "../../lib/ig.js";
 import { checkBasicAuth, sendAuthChallenge } from "../../lib/auth.js";
@@ -31,7 +31,7 @@ export default async function handler(req, res) {
       }
 
       return res.status(200).json({
-        account: { id: account.id, username: account.username, app_link: account.app_link },
+        account: { id: account.id, username: account.username, app_link: effectiveAppLink(account) },
         links: linkMap,
         media,
         media_error: mediaError,
