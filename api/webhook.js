@@ -37,6 +37,12 @@ const linkLines = [
 
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
+// Accounts in this set ignore the account's default app_link in the DB and
+// engage only on reels that have a per-post link override. Add a username
+// here when you want "no default link" behavior but the DB still has one
+// stored (and you can't easily clear it).
+const PER_POST_LINK_ONLY = new Set(["glide.explores"]);
+
 // 2534025 is overloaded — it covers legitimately invalid cases (old comment,
 // already-replied, etc.) AND a race condition where Meta's webhook service
 // delivers the event before its messaging service has indexed the comment.
@@ -297,9 +303,15 @@ async function processAccountComment(account, { commentId, username, mediaId }) 
       console.error(`⚠️ [${account.username}] post_links lookup failed: ${err.message}`);
     }
   }
-  if (!link && account.app_link) link = account.app_link;
+  if (!link && account.app_link && !PER_POST_LINK_ONLY.has(account.username)) {
+    link = account.app_link;
+  }
   if (!link) {
-    console.log(`⏭️ [${account.username}] no link configured for media ${mediaId} — skipping DM and reply`);
+    if (PER_POST_LINK_ONLY.has(account.username)) {
+      console.log(`⏭️ [${account.username}] per-post-only — no link for media ${mediaId}, skipping DM and reply`);
+    } else {
+      console.log(`⏭️ [${account.username}] no link configured for media ${mediaId} — skipping DM and reply`);
+    }
     return;
   }
 
