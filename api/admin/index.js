@@ -53,24 +53,6 @@ const HTML = `<!DOCTYPE html>
   <p class="hint">Toggles apply on the next incoming webhook event. No redeploy needed.</p>
 
   <div class="account">
-    <h2>riddhiii.travels</h2>
-    <div class="toggle">
-      <div>
-        <div class="label">Paused</div>
-        <div class="desc">Ignore all incoming comments. No DM, no reply.</div>
-      </div>
-      <label class="switch"><input type="checkbox" data-flag="riddhi_paused" /><span class="slider"></span></label>
-    </div>
-    <div class="toggle">
-      <div>
-        <div class="label">Skip DMs</div>
-        <div class="desc">Only post the public reply, don't send a private DM.</div>
-      </div>
-      <label class="switch"><input type="checkbox" data-flag="riddhi_dm_disabled" /><span class="slider"></span></label>
-    </div>
-  </div>
-
-  <div class="account">
     <h2>hersheytravels2</h2>
     <div class="toggle">
       <div>
@@ -178,6 +160,7 @@ const HTML = `<!DOCTYPE html>
           </div>
           <div class="actions">
             <button data-action="post-links">Post links</button>
+            <button data-action="edit-token">Edit token</button>
             <button class="danger" data-action="delete">Remove account</button>
           </div>
         </div>
@@ -267,6 +250,27 @@ const HTML = `<!DOCTYPE html>
       }
       for (const btn of $extra.querySelectorAll('button[data-action="post-links"]')) {
         btn.addEventListener('click', () => openPostLinks(btn.closest('.account').dataset.id));
+      }
+      for (const btn of $extra.querySelectorAll('button[data-action="edit-token"]')) {
+        btn.addEventListener('click', async () => {
+          const card = btn.closest('.account');
+          const id = card.dataset.id;
+          const newToken = prompt('Paste the new long-lived access token for this account (leave blank to cancel):');
+          if (!newToken || !newToken.trim()) return;
+          setStatus('Saving new token…');
+          try {
+            const res = await fetch(\`/api/admin/accounts?id=\${encodeURIComponent(id)}\`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ access_token: newToken.trim() }),
+            });
+            if (!res.ok) throw new Error(await res.text());
+            await loadAccounts();
+            setStatus('Token updated at ' + new Date().toLocaleTimeString());
+          } catch (err) {
+            setStatus('Token update failed: ' + err.message, true);
+          }
+        });
       }
     }
 
